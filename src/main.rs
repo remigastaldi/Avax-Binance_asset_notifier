@@ -27,7 +27,7 @@ fn add_utc_line(msg: &str) -> String {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let telegram_bot_token = env::var("TELEGRAM_BOT_TOKEN").expect("TELEGRAM_BOT_TOKEN not set");
-    let telegram_chat_id = env::var("TELEGRAM_CHAT_ID").expect("TELEGRAM_BOT_TOKEN not set");
+    let telegram_chat_id = env::var("TELEGRAM_CHAT_ID").expect("TELEGRAM_CHAT_ID not set");
     let api_key = env::var("BINANCE_API_KEY").expect("BINANCE_API_KEY not set");
     let secret_key = env::var("BINANCE_SECRET_KEY").expect("BINANCE_SECRET_KEY not set");
 
