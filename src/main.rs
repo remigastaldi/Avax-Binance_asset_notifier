@@ -8,7 +8,7 @@ use serde_json::Value;
 use chrono::{DateTime, Utc};
 
 async fn get_avax_withdraw_status(client: & WithdrawalClient) -> Result<bool, String> {
-    match client.get_asset_detail().json::<Value>().await {
+    match client.get_asset_detail().with_recv_window(10000).json::<Value>().await {
         Ok(res) => {
             match res["assetDetail"]["AVAX"]["withdrawStatus"].as_bool() {
                 Some(withdraw_status) => Ok(withdraw_status),
