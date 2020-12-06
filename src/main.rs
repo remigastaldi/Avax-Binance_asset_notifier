@@ -12,7 +12,7 @@ async fn get_avax_withdraw_status(client: & WithdrawalClient) -> Result<bool, St
         Ok(res) => {
             match res["assetDetail"]["AVAX"]["withdrawStatus"].as_bool() {
                 Some(withdraw_status) => Ok(withdraw_status),
-                None => Err(String::from("Error with json parsing, try restart the client if its the first start"))
+                None => Err(format!("Error with json parsing {}", res))
             }
         },
         Err(err) => Err(err.to_string())
@@ -42,27 +42,30 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Ok(res) => save_status = res,
         Err(err) => return Err(err.into())
     }
+
+    let mut msg = add_utc_line(&format!("Bot started\nCurrent withdraw status is {}", if save_status {"[AVAILABLE]"} else {"[SUSPENDED]"}));
     
-    if let Err(err) = telegram_api.send(chat.text(add_utc_line(&format!("Bot started\nCurrent withdraw status is {}", if save_status {"[AVAILABLE]"} else {"[SUSPENDED]"})))).await {
-        println!("Error sending telegram msg {}", err);
+    if let Err(err) = telegram_api.send(chat.text(&msg)).await {
+        eprintln!("Error sending telegram msg {}", err);
         return Err(err.into())
     }
+    println!("{}", &msg);
     
-    let mut msg = String::from("Withdraw");
     let mut binance_retry = 0;
     let mut telegram_retry = 0;
     
+    msg = String::from("Withdraw");
     loop {
+        println!("{}", add_utc_line("Send request to binance")); // for debug
         match get_avax_withdraw_status(&client).await {
             Ok(withdraw_status) => {
                 if save_status != withdraw_status {
-                    
                     match withdraw_status {
                         true => msg.push_str(" [RESUMED]"),
                         false => msg.push_str(" [SUSPENDED]")
                     }
                     msg = add_utc_line(&msg);
-                    
+                    println!("{}",msg);
                     if let Err(err) = telegram_api.send_timeout(chat.text(&msg), Duration::from_secs(5)).await {
                         println!("Error sending telegram msg {}", err);
                         telegram_retry += 1;
@@ -74,7 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 binance_retry = 0;
             },
             Err(err) => {
-                println!("Error binance api {}", err);
+                eprintln!("Error binance api {}", err);
                 binance_retry += 1;
             }
         }
