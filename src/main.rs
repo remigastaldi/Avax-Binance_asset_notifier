@@ -54,11 +54,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut binance_retry = 0;
     let mut telegram_retry = 0;
     
-    msg = String::from("Withdraw");
     loop {
         println!("{}", add_utc_line("Send request to binance")); // for debug
         match get_avax_withdraw_status(&client).await {
             Ok(withdraw_status) => {
+                msg = String::from("Withdraw");
+                
                 if save_status != withdraw_status {
                     match withdraw_status {
                         true => msg.push_str(" [RESUMED]"),
