@@ -1,1 +1,1 @@
-# Avax-Binance_widthdraw_notifier
+# Avax-Binance_asset_notifier
