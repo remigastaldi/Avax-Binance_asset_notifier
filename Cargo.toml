@@ -1,5 +1,5 @@
 [package]
-name = "abwn"
+name = "aban"
 version = "0.1.0"
 authors = ["Remi Gastaldi <remi.gastaldi@protonmail.com>"]
 edition = "2018"
