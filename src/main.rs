@@ -7,11 +7,15 @@ use serde_json::Value;
 
 use chrono::{DateTime, Utc};
 
-async fn get_avax_withdraw_status(client: & WithdrawalClient) -> Result<bool, String> {
+// first bool is withdraw, second is deposit
+async fn get_avax_asset_status(client: & WithdrawalClient) -> Result<(bool, bool), String> {
     match client.get_asset_detail().with_recv_window(10000).json::<Value>().await {
         Ok(res) => {
-            match res["assetDetail"]["AVAX"]["withdrawStatus"].as_bool() {
-                Some(withdraw_status) => Ok(withdraw_status),
+            return match res["assetDetail"]["AVAX"]["withdrawStatus"].as_bool(){
+                Some(withdraw_status) => match res["assetDetail"]["AVAX"]["depositStatus"].as_bool() {
+                    Some(deposit_status) => Ok((withdraw_status, deposit_status)),
+                    None => Err(format!("Error with json parsing {}", res))
+                },
                 None => Err(format!("Error with json parsing {}", res))
             }
         },
@@ -38,12 +42,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let chat = ChatId::new(telegram_chat_id.parse::<i64>()?);
     let mut save_status;
     
-    match get_avax_withdraw_status(&client).await {
+    match get_avax_asset_status(&client).await {
         Ok(res) => save_status = res,
         Err(err) => return Err(err.into())
     }
 
-    let mut msg = add_utc_line(&format!("Bot started\nCurrent withdraw status is {}", if save_status {"[AVAILABLE]"} else {"[SUSPENDED]"}));
+    let mut msg = add_utc_line(&format!("Current Withdraw status is {}\nCurrent Deposit status is {}", if save_status.0 {"[AVAILABLE]"} else {"[SUSPENDED]"}, if save_status.1 {"[AVAILABLE]"} else {"[SUSPENDED]"}));
     
     if let Err(err) = telegram_api.send(chat.text(&msg)).await {
         eprintln!("Error sending telegram msg {}", err);
@@ -51,27 +55,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     println!("{}", &msg);
     
-    let mut binance_retry = 0;
-    let mut telegram_retry = 0;
+    let mut binance_retry: i32 = 0;
+    let mut telegram_retry: i32 = 0;
     
     loop {
         println!("{}", add_utc_line("Send request to binance")); // for debug
-        match get_avax_withdraw_status(&client).await {
-            Ok(withdraw_status) => {
-                msg = String::from("Withdraw");
+        match get_avax_asset_status(&client).await {
+            Ok(asset_status) => {
                 
-                if save_status != withdraw_status {
-                    match withdraw_status {
-                        true => msg.push_str(" [RESUMED]"),
-                        false => msg.push_str(" [SUSPENDED]")
+                if save_status != asset_status {
+                    msg = String::from("");
+                    if save_status.0 != asset_status.0 {
+                        msg.push_str("Withdraw ");
+                        match asset_status.0 {
+                            true => msg.push_str("[RESUMED]"),
+                            false => msg.push_str("[SUSPENDED]")
+                        }
+                    }
+                    if save_status.1 != asset_status.1 {
+                        if !msg.is_empty() {
+                            msg.push('\n');
+                        }
+                        msg.push_str("Deposit ");
+                        match asset_status.0 {
+                            true => msg.push_str("[RESUMED]"),
+                            false => msg.push_str("[SUSPENDED]")
+                        }
                     }
                     msg = add_utc_line(&msg);
                     println!("{}",msg);
-                    if let Err(err) = telegram_api.send_timeout(chat.text(&msg), Duration::from_secs(5)).await {
+                    if let Err(err) = telegram_api.send_timeout(chat.text(&msg), Duration::from_secs(8)).await {
                         println!("Error sending telegram msg {}", err);
                         telegram_retry += 1;
                     } else {
-                        save_status = withdraw_status;
+                        save_status = asset_status;
                         telegram_retry = 0;
                     }
                 }
