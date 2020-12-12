@@ -77,7 +77,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                             msg.push('\n');
                         }
                         msg.push_str("Deposit ");
-                        match asset_status.0 {
+                        match asset_status.1 {
                             true => msg.push_str("[RESUMED]"),
                             false => msg.push_str("[SUSPENDED]")
                         }
