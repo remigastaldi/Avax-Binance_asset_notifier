@@ -47,7 +47,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(err) => return Err(err.into())
     }
 
-    let mut msg = add_utc_line(&format!("Current Withdraw status is {}\nCurrent Deposit status is {}", if save_status.0 {"[AVAILABLE]"} else {"[SUSPENDED]"}, if save_status.1 {"[AVAILABLE]"} else {"[SUSPENDED]"}));
+    let mut msg = add_utc_line(&format!("Current Withdrawal status is {}\nCurrent Deposit status is {}", if save_status.0 {"[AVAILABLE]"} else {"[SUSPENDED]"}, if save_status.1 {"[AVAILABLE]"} else {"[SUSPENDED]"}));
     
     if let Err(err) = telegram_api.send(chat.text(&msg)).await {
         eprintln!("Error sending telegram msg {}", err);
@@ -100,10 +100,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             }
         }
         if binance_retry == 5 {
-            return Err("Too much errors binance api".into())
+            println!("Too much errors binance api, waiting 1 hour");
+            sleep(Duration::from_secs(3600));
         }
         if telegram_retry == 5 {
-            return Err("Too much errors telegram api".into())
+            println!("Too much errors telegram api, waiting 1 hour");
+            sleep(Duration::from_secs(3600));
         }
         sleep(Duration::from_secs(60));
     }
