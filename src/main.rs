@@ -66,7 +66,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if save_status != asset_status {
                     msg = String::from("");
                     if save_status.0 != asset_status.0 {
-                        msg.push_str("Withdraw ");
+                        msg.push_str("Withdrawal ");
                         match asset_status.0 {
                             true => msg.push_str("[RESUMED]"),
                             false => msg.push_str("[SUSPENDED]")
