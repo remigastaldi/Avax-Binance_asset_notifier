@@ -5,7 +5,7 @@ use telegram_bot::*;
 use tokio_binance::WithdrawalClient;
 use serde_json::Value;
 
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 
 // first bool is withdraw, second is deposit
 async fn get_avax_asset_status(client: & WithdrawalClient) -> Result<(bool, bool), String> {
@@ -24,8 +24,8 @@ async fn get_avax_asset_status(client: & WithdrawalClient) -> Result<(bool, bool
 }
 
 fn add_utc_line(msg: &str) -> String {
-    let utc: DateTime<Utc> = Utc::now();
-    format!("{}\n{}", msg, utc)
+    let utc = Utc::now().naive_utc().to_string();
+    format!("{}\n{} UTC", msg, utc.split('.').collect::<Vec<&str>>()[0])
 }
 
 #[tokio::main]
