@@ -7,6 +7,9 @@ use serde_json::Value;
 
 use chrono::Utc;
 
+const MAX_API_RETRY: i32 = 5;
+const REFRESH_RATE: u64 = 60; // in seconds
+
 // first bool is withdraw, second is deposit
 async fn get_avax_asset_status(client: & WithdrawalClient) -> Result<(bool, bool), String> {
     match client.get_asset_detail().with_recv_window(10000).json::<Value>().await {
@@ -35,14 +38,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let api_key = env::var("BINANCE_API_KEY").expect("BINANCE_API_KEY not set");
     let secret_key = env::var("BINANCE_SECRET_KEY").expect("BINANCE_SECRET_KEY not set");
 
-    let telegram_api = Api::new(telegram_bot_token);
+    let mut telegram_api = Api::new(&telegram_bot_token);
     
-    let client = WithdrawalClient::connect(api_key, secret_key, "https://api.binance.com")?;
+    let mut binance_client = WithdrawalClient::connect(&api_key, &secret_key, "https://api.binance.com")?;
     
     let chat = ChatId::new(telegram_chat_id.parse::<i64>()?);
     let mut save_status;
     
-    match get_avax_asset_status(&client).await {
+    match get_avax_asset_status(&binance_client).await {
         Ok(res) => save_status = res,
         Err(err) => return Err(err.into())
     }
@@ -60,7 +63,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     loop {
         println!("{}", add_utc_line("Send request to binance")); // for debug
-        match get_avax_asset_status(&client).await {
+        match get_avax_asset_status(&binance_client).await {
             Ok(asset_status) => {
                 
                 if save_status != asset_status {
@@ -99,14 +102,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 binance_retry += 1;
             }
         }
-        if binance_retry == 5 {
+        if binance_retry == MAX_API_RETRY {
             println!("Too much errors binance api, waiting 1 hour");
             sleep(Duration::from_secs(3600));
+            binance_client = WithdrawalClient::connect(&api_key, &secret_key, "https://api.binance.com")?;
         }
-        if telegram_retry == 5 {
+        if telegram_retry == MAX_API_RETRY {
             println!("Too much errors telegram api, waiting 1 hour");
             sleep(Duration::from_secs(3600));
+            telegram_api = Api::new(&telegram_bot_token);
         }
-        sleep(Duration::from_secs(60));
+        sleep(Duration::from_secs(REFRESH_RATE));
     }
 }
