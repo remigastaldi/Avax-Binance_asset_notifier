@@ -1,26 +1,91 @@
-use std::{env, thread::sleep, time::Duration};
+use core::fmt;
+use std::{env, iter::Map, os::linux::raw::stat, thread::sleep, time::Duration};
 
 use telegram_bot::*;
 
 use tokio_binance::WithdrawalClient;
-use serde_json::Value;
+use serde_json::{Value};
 
 use chrono::Utc;
 
 const MAX_API_RETRY: i32 = 5;
 const REFRESH_RATE: u64 = 60; // in seconds
 
-// first bool is withdraw, second is deposit
-async fn get_avax_asset_status(client: & WithdrawalClient) -> Result<(bool, bool), String> {
-    match client.get_asset_detail().with_recv_window(10000).json::<Value>().await {
-        Ok(res) => {
-            return match res["assetDetail"]["AVAX"]["withdrawStatus"].as_bool(){
-                Some(withdraw_status) => match res["assetDetail"]["AVAX"]["depositStatus"].as_bool() {
-                    Some(deposit_status) => Ok((withdraw_status, deposit_status)),
-                    None => Err(format!("Error with json parsing {}", res))
-                },
-                None => Err(format!("Error with json parsing {}", res))
+#[derive(PartialEq)]
+struct CoinStatus {
+    network: String,
+    deposit: bool,
+    deposit_desc: String,
+    withdraw: bool,
+    withdraw_desc: String,
+}
+
+#[derive(PartialEq)]
+struct CoinNetwork {
+    networks: Vec<CoinStatus>
+}
+
+impl fmt::Display for CoinStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "Network: {}", self.network).unwrap();
+
+        match self.deposit {
+            true => {
+                writeln!(f, "Deposit available").unwrap();
             }
+            false => {
+                writeln!(f, "Deposit suspended: {}", self.deposit_desc).unwrap();
+            }
+        }
+        match self.withdraw {
+            true => {
+                writeln!(f, "Withdraw available").unwrap();
+            }
+            false => {
+                write!(f, "Withdraw suspended: {}", self.withdraw_desc).unwrap();
+            }
+        }
+        Ok(())
+    }
+}
+
+impl CoinNetwork {
+    fn new() -> Self {
+        CoinNetwork{networks: Vec::new()}
+    }
+}
+
+impl CoinNetwork {
+    fn status(&self) -> String {
+        let mut msg = String::new();
+        for (i, network) in self.networks.iter().enumerate() {
+            msg += &format!("{}{}{}", if i != 0 {"\n"} else {""}, network, if i + 1 < self.networks.len() {"\n"} else {""});
+        }
+        msg
+    }
+}
+
+// first bool is withdraw, second is deposit
+async fn get_avax_asset_status(client: & WithdrawalClient) -> Result<CoinNetwork, String> {
+    match client.get_asset_detail().with_recv_window(10000).json::<Vec<Value>>().await {
+        Ok(res) => {
+            for coin in & res {
+                if coin["coin"] == "AVAX" {
+                    let mut status = CoinNetwork::new();
+
+                    return match coin["networkList"].as_array() {
+                        Some(networks) => {
+                            for network in networks {
+                                status.networks.push(CoinStatus{network: network["network"].as_str().unwrap().to_string(), deposit: network["depositEnable"].as_bool().unwrap(), deposit_desc: network["depositDesc"].as_str().unwrap().to_string(),
+                                    withdraw: network["withdrawEnable"].as_bool().unwrap(), withdraw_desc: network["withdrawDesc"].as_str().unwrap().to_string()});
+                            }
+                            Ok(status)
+                        }
+                        None => Err(format!("Error with json parsing {}", "network")),
+                    }
+                }
+            }
+            Err("No Avax found".to_string())
         },
         Err(err) => Err(err.to_string())
     }
@@ -38,11 +103,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let api_key = env::var("BINANCE_API_KEY").expect("BINANCE_API_KEY not set");
     let secret_key = env::var("BINANCE_SECRET_KEY").expect("BINANCE_SECRET_KEY not set");
 
-    let mut telegram_api = Api::new(&telegram_bot_token);
-    
     let mut binance_client = WithdrawalClient::connect(&api_key, &secret_key, "https://api.binance.com")?;
-    
+    let mut telegram_api = Api::new(&telegram_bot_token);
     let chat = ChatId::new(telegram_chat_id.parse::<i64>()?);
+
     let mut save_status;
     
     match get_avax_asset_status(&binance_client).await {
@@ -50,8 +114,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         Err(err) => return Err(err.into())
     }
 
-    let mut msg = add_utc_line(&format!("Current Withdrawal status is {}\nCurrent Deposit status is {}", if save_status.0 {"[AVAILABLE]"} else {"[SUSPENDED]"}, if save_status.1 {"[AVAILABLE]"} else {"[SUSPENDED]"}));
-    
+    let mut msg = add_utc_line(&save_status.status());
+
     if let Err(err) = telegram_api.send(chat.text(&msg)).await {
         eprintln!("Error sending telegram msg {}", err);
         return Err(err.into())
@@ -60,32 +124,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let mut binance_retry: i32 = 0;
     let mut telegram_retry: i32 = 0;
-    
+
     loop {
         println!("{}", add_utc_line("Send request to binance")); // for debug
         match get_avax_asset_status(&binance_client).await {
             Ok(asset_status) => {
-                
                 if save_status != asset_status {
-                    msg = String::from("");
-                    if save_status.0 != asset_status.0 {
-                        msg.push_str("Withdrawal ");
-                        match asset_status.0 {
-                            true => msg.push_str("[RESUMED]"),
-                            false => msg.push_str("[SUSPENDED]")
-                        }
-                    }
-                    if save_status.1 != asset_status.1 {
-                        if !msg.is_empty() {
-                            msg.push('\n');
-                        }
-                        msg.push_str("Deposit ");
-                        match asset_status.1 {
-                            true => msg.push_str("[RESUMED]"),
-                            false => msg.push_str("[SUSPENDED]")
-                        }
-                    }
-                    msg = add_utc_line(&msg);
+                    msg = add_utc_line(&save_status.status());
                     println!("{}",msg);
                     if let Err(err) = telegram_api.send_timeout(chat.text(&msg), Duration::from_secs(8)).await {
                         println!("Error sending telegram msg {}", err);
