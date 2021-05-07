@@ -39,10 +39,10 @@ impl fmt::Display for CoinStatus {
         }
         match self.withdraw {
             true => {
-                writeln!(f, "Withdraw available").unwrap();
+                writeln!(f, "Withdrawal available").unwrap();
             }
             false => {
-                write!(f, "Withdraw suspended: {}", self.withdraw_desc).unwrap();
+                write!(f, "Withdrawal suspended: {}", self.withdraw_desc).unwrap();
             }
         }
         Ok(())
