@@ -130,7 +130,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match get_avax_asset_status(&binance_client).await {
             Ok(asset_status) => {
                 if save_status != asset_status {
-                    msg = add_utc_line(&save_status.status());
+                    msg = add_utc_line(&asset_status.status());
                     println!("{}",msg);
                     if let Err(err) = telegram_api.send_timeout(chat.text(&msg), Duration::from_secs(8)).await {
                         println!("Error sending telegram msg {}", err);
