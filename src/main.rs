@@ -1,5 +1,5 @@
 use core::fmt;
-use std::{env, iter::Map, os::linux::raw::stat, thread::sleep, time::Duration};
+use std::{env, thread::sleep, time::Duration};
 
 use telegram_bot::*;
 
@@ -34,7 +34,7 @@ impl fmt::Display for CoinStatus {
                 writeln!(f, "Deposit available").unwrap();
             }
             false => {
-                writeln!(f, "Deposit suspended: {}", self.deposit_desc).unwrap();
+                writeln!(f, "{}", self.deposit_desc).unwrap();
             }
         }
         match self.withdraw {
@@ -42,7 +42,7 @@ impl fmt::Display for CoinStatus {
                 writeln!(f, "Withdrawal available").unwrap();
             }
             false => {
-                write!(f, "Withdrawal suspended: {}", self.withdraw_desc).unwrap();
+                write!(f, "{}", self.withdraw_desc).unwrap();
             }
         }
         Ok(())
@@ -65,9 +65,8 @@ impl CoinNetwork {
     }
 }
 
-// first bool is withdraw, second is deposit
 async fn get_avax_asset_status(client: & WithdrawalClient) -> Result<CoinNetwork, String> {
-    match client.get_asset_detail().with_recv_window(10000).json::<Vec<Value>>().await {
+    match client.get_capital_config().with_recv_window(10000).json::<Vec<Value>>().await {
         Ok(res) => {
             for coin in & res {
                 if coin["coin"] == "AVAX" {
@@ -102,7 +101,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let telegram_chat_id = env::var("TELEGRAM_CHAT_ID").expect("TELEGRAM_CHAT_ID not set");
     let api_key = env::var("BINANCE_API_KEY").expect("BINANCE_API_KEY not set");
     let secret_key = env::var("BINANCE_SECRET_KEY").expect("BINANCE_SECRET_KEY not set");
-
+    
     let mut binance_client = WithdrawalClient::connect(&api_key, &secret_key, "https://api.binance.com")?;
     let mut telegram_api = Api::new(&telegram_bot_token);
     let chat = ChatId::new(telegram_chat_id.parse::<i64>()?);

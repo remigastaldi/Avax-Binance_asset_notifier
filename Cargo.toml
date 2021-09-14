@@ -13,6 +13,6 @@ tokio = { version = "1.2.0", features = ["macros", "time"] }
 futures = "0.3"
 telegram-bot = "0.7"
 
-tokio-binance = "1.0"
+tokio-binance = { git = "https://github.com/remigastaldi/tokio-binance" }
 serde_json = "1.0.62"
 chrono = "0.4"
